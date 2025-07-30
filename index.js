@@ -21,7 +21,7 @@ app.post('/check', async (req, res) => {
       token: purchaseToken
     });
 
-    res.json({ status: result.data.purchaseState });
+    res.json({   purchaseState: result.data.purchaseState,   consumptionState: result.data.consumptionState,   acknowledgementState: result.data.acknowledgementState,   orderId: result.data.orderId });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
