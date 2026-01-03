@@ -1,6 +1,7 @@
 const express = require('express');
 const { google } = require('googleapis');
 const bodyParser = require('body-parser');
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const app = express();
 app.use(bodyParser.json());
@@ -10,38 +11,44 @@ const auth = new google.auth.GoogleAuth({
   scopes: ['https://www.googleapis.com/auth/androidpublisher']
 });
 
-/**
- * NEW ORDER-BASED CHECK (orderId)
- */
 app.post('/order', async (req, res) => {
   try {
     const { packageName, orderId } = req.body;
 
     if (!packageName || !orderId) {
-      return res.status(400).json({ error: 'packageName and orderId are required' });
+      return res.status(400).json({ error: 'packageName and orderId required' });
     }
 
+    // 🔑 Get OAuth access token
     const client = await auth.getClient();
-    const androidpublisher = google.androidpublisher({
-      version: 'v3',
-      auth: client
+    const accessToken = await client.getAccessToken();
+
+    // 📡 Orders REST API call
+    const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/orders/${orderId}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        Authorization: `Bearer ${accessToken.token}`
+      }
     });
 
-    const result = await androidpublisher.orders.get({
-      packageName,
-      orderId
-    });
+    const data = await response.json();
 
-    const order = result.data;
+    if (!response.ok) {
+      return res.status(response.status).json(data);
+    }
+
+    const lineItem = data.lineItems?.[0] || {};
 
     res.json({
-      orderId: order.orderId,
-      purchaseToken: order.lineItems?.[0]?.purchaseToken || null,
-      productId: order.lineItems?.[0]?.productId || null,
-      purchaseTimeMillis: order.lineItems?.[0]?.purchaseTimeMillis || null,
-      state: order.lineItems?.[0]?.state || null,
-      price: order.lineItems?.[0]?.price?.amountMicros || null,
-      currency: order.lineItems?.[0]?.price?.currencyCode || null
+      orderId: data.orderId,
+      productId: lineItem.productId || null,
+      purchaseToken: lineItem.purchaseToken || null,
+      purchaseTimeMillis: lineItem.purchaseTimeMillis || null,
+      state: lineItem.state || null,
+      priceMicros: lineItem.price?.amountMicros || null,
+      currency: lineItem.price?.currencyCode || null
     });
 
   } catch (err) {
@@ -50,6 +57,4 @@ app.post('/order', async (req, res) => {
   }
 });
 
-app.listen(3000, () => {
-  console.log('NEW Order API running on port 3000');
-});
+app.listen(3000, () => console.log('Order API running'));
