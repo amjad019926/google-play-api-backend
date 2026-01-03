@@ -6,7 +6,7 @@ const app = express();
 app.use(bodyParser.json());
 
 /**
- * Google Auth
+ * Google Auth (Service Account)
  */
 const auth = new google.auth.GoogleAuth({
   keyFile: '/etc/secrets/service-account.json',
@@ -14,7 +14,11 @@ const auth = new google.auth.GoogleAuth({
 });
 
 /**
- * ORDER LOOKUP BY ORDER ID (NEW SYSTEM)
+ * ORDER LOOKUP BY ORDER ID (UNIVERSAL)
+ * Works for:
+ * - One-time products
+ * - Subscriptions
+ * - Legacy orders
  */
 app.post('/order', async (req, res) => {
   try {
@@ -26,11 +30,11 @@ app.post('/order', async (req, res) => {
       });
     }
 
-    // Get access token
+    // Get OAuth token
     const client = await auth.getClient();
     const accessToken = await client.getAccessToken();
 
-    // Orders REST API (SDK does NOT support this yet)
+    // Orders REST endpoint
     const url =
       `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/orders/${orderId}`;
 
@@ -47,16 +51,48 @@ app.post('/order', async (req, res) => {
       return res.status(response.status).json(data);
     }
 
-    const item = data.lineItems && data.lineItems[0] ? data.lineItems[0] : {};
+    // Safely extract first line item
+    const item = data.lineItems?.[0] || {};
+
+    // UNIVERSAL extraction (all order types)
+    const productId =
+      item.productId ||
+      item.subscriptionDetails?.productId ||
+      item.productDetails?.productId ||
+      null;
+
+    const purchaseToken =
+      item.purchaseToken ||
+      item.subscriptionDetails?.purchaseToken ||
+      item.productDetails?.purchaseToken ||
+      null;
+
+    const purchaseTimeMillis =
+      item.purchaseTimeMillis ||
+      item.subscriptionDetails?.purchaseTimeMillis ||
+      item.productDetails?.purchaseTimeMillis ||
+      null;
+
+    const state =
+      item.state ||
+      item.subscriptionDetails?.state ||
+      item.productDetails?.state ||
+      null;
+
+    const price =
+      item.price ||
+      item.subscriptionDetails?.price ||
+      item.productDetails?.price ||
+      null;
 
     res.json({
       orderId: data.orderId,
-      productId: item.productId || null,
-      purchaseToken: item.purchaseToken || null,
-      purchaseTimeMillis: item.purchaseTimeMillis || null,
-      state: item.state || null,
-      priceMicros: item.price?.amountMicros || null,
-      currency: item.price?.currencyCode || null
+      productId,
+      purchaseToken,
+      purchaseTimeMillis,
+      state,
+      priceMicros: price?.amountMicros || null,
+      currency: price?.currencyCode || null
     });
 
   } catch (err) {
