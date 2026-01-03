@@ -14,29 +14,22 @@ const auth = new google.auth.GoogleAuth({
 });
 
 /**
- * ORDER LOOKUP BY ORDER ID (UNIVERSAL)
- * Works for:
- * - One-time products
- * - Subscriptions
- * - Legacy orders
+ * RAW ORDER DATA ENDPOINT
  */
 app.post('/order', async (req, res) => {
   try {
     const { packageName, orderId } = req.body;
 
     if (!packageName || !orderId) {
-      return res.status(400).json({
-        error: 'packageName and orderId are required'
-      });
+      return res.status(400).json({ error: 'packageName and orderId are required' });
     }
 
     // Get OAuth token
     const client = await auth.getClient();
     const accessToken = await client.getAccessToken();
 
-    // Orders REST endpoint
-    const url =
-      `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/orders/${orderId}`;
+    // Call Google Play Orders REST API
+    const url = `https://androidpublisher.googleapis.com/androidpublisher/v3/applications/${packageName}/orders/${orderId}`;
 
     const response = await fetch(url, {
       method: 'GET',
@@ -47,53 +40,8 @@ app.post('/order', async (req, res) => {
 
     const data = await response.json();
 
-    if (!response.ok) {
-      return res.status(response.status).json(data);
-    }
-
-    // Safely extract first line item
-    const item = data.lineItems?.[0] || {};
-
-    // UNIVERSAL extraction (all order types)
-    const productId =
-      item.productId ||
-      item.subscriptionDetails?.productId ||
-      item.productDetails?.productId ||
-      null;
-
-    const purchaseToken =
-      item.purchaseToken ||
-      item.subscriptionDetails?.purchaseToken ||
-      item.productDetails?.purchaseToken ||
-      null;
-
-    const purchaseTimeMillis =
-      item.purchaseTimeMillis ||
-      item.subscriptionDetails?.purchaseTimeMillis ||
-      item.productDetails?.purchaseTimeMillis ||
-      null;
-
-    const state =
-      item.state ||
-      item.subscriptionDetails?.state ||
-      item.productDetails?.state ||
-      null;
-
-    const price =
-      item.price ||
-      item.subscriptionDetails?.price ||
-      item.productDetails?.price ||
-      null;
-
-    res.json({
-      orderId: data.orderId,
-      productId,
-      purchaseToken,
-      purchaseTimeMillis,
-      state,
-      priceMicros: price?.amountMicros || null,
-      currency: price?.currencyCode || null
-    });
+    // Return raw data exactly as received
+    res.json(data);
 
   } catch (err) {
     console.error(err);
@@ -102,7 +50,7 @@ app.post('/order', async (req, res) => {
 });
 
 /**
- * REQUIRED FOR RENDER
+ * Port binding for Render
  */
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
